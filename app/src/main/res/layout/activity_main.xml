@@ -3,80 +3,109 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#0A0A0A"
-    android:padding="8dp">
+    android:background="#050505"
+    android:padding="10dp">
 
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="MULTI SUB CATCHER"
         android:textColor="#00E676"
-        android:textSize="18sp"
+        android:textSize="20sp"
         android:textStyle="bold"
         android:gravity="center"
-        android:padding="6dp" />
+        android:paddingBottom="6dp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Site select karo"
+        android:textColor="#888888"
+        android:textSize="11sp"
+        android:paddingBottom="2dp" />
 
     <Spinner
         android:id="@+id/spinnerSite"
         android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:background="#1C1C1C"
+        android:popupBackground="#1C1C1C"
+        android:layout_marginBottom="6dp" />
+
+    <TextView
+        android:id="@+id/tvSiteUrl"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="#1A1A1A"
-        android:padding="8dp"
-        android:layout_marginBottom="4dp" />
+        android:textColor="#666666"
+        android:textSize="10sp"
+        android:paddingBottom="6dp"
+        android:text="" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Access Key"
+        android:textColor="#888888"
+        android:textSize="11sp"
+        android:paddingBottom="2dp" />
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:paddingBottom="4dp">
+        android:paddingBottom="6dp">
 
         <EditText
             android:id="@+id/etKey"
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
+            android:layout_height="48dp"
             android:layout_weight="1"
-            android:hint="KEY yahan dalo"
+            android:hint="KEY yahan paste karo"
             android:textColor="#FFFFFF"
-            android:textColorHint="#666666"
-            android:background="#1A1A1A"
-            android:padding="10dp"
-            android:textSize="13sp"
-            android:inputType="text" />
+            android:textColorHint="#555555"
+            android:background="#1C1C1C"
+            android:padding="12dp"
+            android:textSize="14sp"
+            android:inputType="text"
+            android:singleLine="true" />
 
         <Button
             android:id="@+id/btnLoad"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="LOAD"
+            android:layout_height="48dp"
+            android:text="GO"
             android:textColor="#000000"
+            android:textStyle="bold"
             android:backgroundTint="#00E676"
-            android:layout_marginStart="4dp" />
+            android:layout_marginStart="6dp"
+            android:minWidth="72dp" />
     </LinearLayout>
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:paddingBottom="4dp">
+        android:paddingBottom="6dp">
 
         <Button
             android:id="@+id/btnClear"
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
+            android:layout_height="40dp"
             android:layout_weight="1"
-            android:text="CLEAR LOG"
+            android:text="CLEAR"
             android:textColor="#FFFFFF"
-            android:backgroundTint="#333333"
+            android:backgroundTint="#2A2A2A"
             android:layout_marginEnd="4dp" />
 
         <Button
             android:id="@+id/btnCopy"
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
+            android:layout_height="40dp"
             android:layout_weight="1"
-            android:text="COPY ALL"
+            android:text="COPY LOG"
             android:textColor="#000000"
-            android:backgroundTint="#00E676" />
+            android:backgroundTint="#00E676"
+            android:layout_marginStart="4dp" />
     </LinearLayout>
 
     <WebView
@@ -84,30 +113,32 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:background="#111111" />
+        android:background="#0A0A0A" />
 
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="CAPTURED PAYLOADS"
+        android:text="● LIVE CAPTURE"
         android:textColor="#00E676"
-        android:textSize="12sp"
-        android:paddingTop="4dp"
+        android:textSize="11sp"
+        android:textStyle="bold"
+        android:paddingTop="6dp"
         android:paddingBottom="2dp" />
 
     <ScrollView
         android:layout_width="match_parent"
-        android:layout_height="160dp"
-        android:background="#111111">
+        android:layout_height="150dp"
+        android:background="#0D0D0D"
+        android:padding="4dp">
 
         <TextView
             android:id="@+id/tvLog"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:textColor="#00FF88"
-            android:textSize="11sp"
+            android:textSize="10sp"
             android:fontFamily="monospace"
-            android:padding="6dp"
-            android:text="Waiting for traffic...\n" />
+            android:padding="4dp"
+            android:text="Waiting...\n" />
     </ScrollView>
 </LinearLayout>

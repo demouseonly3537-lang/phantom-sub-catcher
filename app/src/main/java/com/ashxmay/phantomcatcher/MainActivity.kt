@@ -18,8 +18,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvLog: TextView
     private lateinit var etKey: EditText
     private lateinit var spinnerSite: Spinner
+    private lateinit var tvSiteUrl: TextView
     private val logBuilder = StringBuilder()
     private val mainHandler = Handler(Looper.getMainLooper())
+    private var injectCount = 0
 
     data class Site(val name: String, val url: String)
 
@@ -42,39 +44,63 @@ class MainActivity : AppCompatActivity() {
         tvLog = findViewById(R.id.tvLog)
         etKey = findViewById(R.id.etKey)
         spinnerSite = findViewById(R.id.spinnerSite)
+        tvSiteUrl = findViewById(R.id.tvSiteUrl)
         val btnLoad = findViewById<Button>(R.id.btnLoad)
         val btnClear = findViewById<Button>(R.id.btnClear)
         val btnCopy = findViewById<Button>(R.id.btnCopy)
 
         val names = sites.map { it.name }
         val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, names)
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         spinnerSite.adapter = adapter
-        spinnerSite.setSelection(0)
 
-        etKey.setText("PHTM-860A-9292-EA6A")
+        spinnerSite.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                val site = sites[position]
+                tvSiteUrl.text = site.url
+                appendLog(">> Site changed → ${site.name}")
+                loadSelectedSite()
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+
+        etKey.setText("")
+        etKey.hint = "KEY yahan paste karo"
 
         setupWebView()
 
         btnLoad.setOnClickListener {
-            val key = etKey.text.toString().trim()
-            val site = sites[spinnerSite.selectedItemPosition]
-            appendLog(">> Loading ${site.name} | key=$key")
-            webView.loadUrl(site.url)
+            loadSelectedSite()
         }
 
         btnClear.setOnClickListener {
             logBuilder.clear()
             tvLog.text = "Waiting...\n"
+            injectCount = 0
         }
 
         btnCopy.setOnClickListener {
             val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             cm.setPrimaryClip(ClipData.newPlainText("caught", logBuilder.toString()))
-            Toast.makeText(this, "Copied full dump", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Log copied!", Toast.LENGTH_SHORT).show()
         }
 
-        webView.loadUrl(sites[0].url)
-        appendLog(">> Multi Sub Catcher ready. Site select karo → Key dalo → LOAD")
+        tvSiteUrl.text = sites[0].url
+        appendLog(">> Ready. Site select → Key paste → auto load / GO")
+    }
+
+    private fun loadSelectedSite() {
+        val pos = spinnerSite.selectedItemPosition
+        if (pos < 0) return
+        val site = sites[pos]
+        val key = etKey.text.toString().trim()
+        injectCount = 0
+        appendLog(">> LOAD ${site.name} | key=${if (key.isEmpty()) "(empty)" else key}")
+        webView.stopLoading()
+        webView.loadUrl("about:blank")
+        mainHandler.postDelayed({
+            webView.loadUrl(site.url)
+        }, 150)
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -83,7 +109,7 @@ class MainActivity : AppCompatActivity() {
         ws.javaScriptEnabled = true
         ws.domStorageEnabled = true
         ws.databaseEnabled = true
-        ws.cacheMode = WebSettings.LOAD_DEFAULT
+        ws.cacheMode = WebSettings.LOAD_NO_CACHE
         ws.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
         ws.userAgentString =
             "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
@@ -113,14 +139,13 @@ class MainActivity : AppCompatActivity() {
                     url.startsWith("streisand://") || url.contains("crypt") ||
                     url.startsWith("shadowrocket://") || url.startsWith("surge://")
                 ) {
-                    appendLog("=== CUSTOM SCHEME CAUGHT ===")
+                    appendLog("=== DEEP LINK CAUGHT ===")
                     appendLog(url)
-                    appendLog("RAW: ${url.substringAfter("://")}")
-                    appendLog("============================")
+                    appendLog("========================")
                     runOnUiThread {
                         val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        cm.setPrimaryClip(ClipData.newPlainText("happ", url))
-                        Toast.makeText(this@MainActivity, "Deep-link copied!", Toast.LENGTH_LONG).show()
+                        cm.setPrimaryClip(ClipData.newPlainText("deeplink", url))
+                        Toast.makeText(this@MainActivity, "Deep-link COPIED!", Toast.LENGTH_LONG).show()
                     }
                     return true
                 }
@@ -129,8 +154,12 @@ class MainActivity : AppCompatActivity() {
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
+                if (url == null || url == "about:blank") return
                 appendLog("PAGE: $url")
                 injectCatcher(view)
+                mainHandler.postDelayed({ injectCatcher(view) }, 600)
+                mainHandler.postDelayed({ injectCatcher(view) }, 1500)
+                mainHandler.postDelayed({ injectCatcher(view) }, 2800)
             }
         }
 
@@ -153,65 +182,82 @@ class MainActivity : AppCompatActivity() {
 
     private fun injectCatcher(view: WebView?) {
         val key = etKey.text.toString().trim()
-        if (key.isEmpty()) return
+        if (key.isEmpty()) {
+            appendLog("!! Key empty – pehle key paste karo")
+            return
+        }
+        injectCount++
+        val n = injectCount
 
         val js = """
             (function(){
-                if(window.__catcherInjected) return;
-                window.__catcherInjected = true;
                 var KEY = '$key';
+                var tag = '[$n]';
 
-                var origFetch = window.fetch;
-                window.fetch = function(input, init) {
-                    var url = (typeof input === 'string') ? input : (input && input.url ? input.url : '');
-                    var method = (init && init.method) || 'GET';
-                    var body = (init && init.body) ? String(init.body) : '';
-                    Catcher.log('REQ ' + method + ' ' + url + ' BODY=' + body.substring(0, 600));
+                if(!window.__fetchPatched){
+                    window.__fetchPatched = true;
+                    var origFetch = window.fetch;
+                    window.fetch = function(input, init) {
+                        var url = (typeof input === 'string') ? input : (input && input.url ? input.url : '');
+                        var method = (init && init.method) || 'GET';
+                        var body = (init && init.body) ? String(init.body) : '';
+                        Catcher.log(tag + ' REQ ' + method + ' ' + url + ' BODY=' + body.substring(0, 700));
+                        return origFetch.apply(this, arguments).then(function(resp) {
+                            var clone = resp.clone();
+                            clone.text().then(function(t) {
+                                Catcher.log(tag + ' RESP ' + resp.status + ' ' + url + ' → ' + t.substring(0, 1000));
+                            }).catch(function(){});
+                            return resp;
+                        });
+                    };
+                    var origOpen = XMLHttpRequest.prototype.open;
+                    var origSend = XMLHttpRequest.prototype.send;
+                    XMLHttpRequest.prototype.open = function(method, url) {
+                        this.__m = method; this.__u = url;
+                        return origOpen.apply(this, arguments);
+                    };
+                    XMLHttpRequest.prototype.send = function(body) {
+                        var self = this;
+                        Catcher.log(tag + ' XHR ' + (this.__m||'?') + ' ' + (this.__u||'?') + ' BODY=' + (body ? String(body).substring(0,700) : ''));
+                        this.addEventListener('load', function() {
+                            Catcher.log(tag + ' XHR-RESP ' + self.status + ' → ' + (self.responseText||'').substring(0,1000));
+                        });
+                        return origSend.apply(this, arguments);
+                    };
+                    Catcher.log(tag + ' fetch/XHR patched');
+                }
 
-                    return origFetch.apply(this, arguments).then(function(resp) {
-                        var clone = resp.clone();
-                        clone.text().then(function(t) {
-                            Catcher.log('RESP ' + resp.status + ' ' + url + ' → ' + t.substring(0, 900));
-                        }).catch(function(){});
-                        return resp;
-                    });
-                };
-
-                var origOpen = XMLHttpRequest.prototype.open;
-                var origSend = XMLHttpRequest.prototype.send;
-                XMLHttpRequest.prototype.open = function(method, url) {
-                    this.__m = method; this.__u = url;
-                    return origOpen.apply(this, arguments);
-                };
-                XMLHttpRequest.prototype.send = function(body) {
-                    var self = this;
-                    Catcher.log('XHR-REQ ' + (this.__m||'?') + ' ' + (this.__u||'?') + ' BODY=' + (body ? String(body).substring(0,600) : ''));
-                    this.addEventListener('load', function() {
-                        Catcher.log('XHR-RESP ' + self.status + ' ' + (self.__u||'?') + ' → ' + (self.responseText||'').substring(0,900));
-                    });
-                    return origSend.apply(this, arguments);
-                };
-
-                function forceFill() {
+                function forceKey() {
                     var inputs = document.querySelectorAll('input, textarea');
+                    var filled = 0;
                     for(var i=0; i<inputs.length; i++){
                         var el = inputs[i];
-                        el.value = KEY;
-                        el.setAttribute('value', KEY);
-                        el.dispatchEvent(new Event('input', {bubbles:true}));
-                        el.dispatchEvent(new Event('change', {bubbles:true}));
+                        try {
+                            var nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+                            if(nativeInputValueSetter){
+                                nativeInputValueSetter.call(el, KEY);
+                            } else {
+                                el.value = KEY;
+                            }
+                            el.setAttribute('value', KEY);
+                            el.dispatchEvent(new Event('input', {bubbles:true}));
+                            el.dispatchEvent(new Event('change', {bubbles:true}));
+                            el.dispatchEvent(new KeyboardEvent('keyup', {bubbles:true}));
+                            filled++;
+                        } catch(e){}
                     }
+                    if(filled > 0) Catcher.log(tag + ' FILLED ' + filled + ' inputs with ' + KEY);
                 }
 
                 function tryClick() {
-                    var btns = document.querySelectorAll('button, a, div[role=button], input[type=submit], span');
+                    var btns = document.querySelectorAll('button, a, div[role=button], input[type=submit]');
                     for(var j=0; j<btns.length; j++){
                         var b = btns[j];
                         var txt = (b.innerText || b.value || b.textContent || '').toLowerCase().trim();
                         if(txt.includes('unlock') || txt === 'connect' || txt.includes('redeem') ||
                            txt.includes('login') || txt.includes('activate') || txt.includes('start') ||
-                           txt.includes('submit') || txt.includes('continue')){
-                            Catcher.log('CLICK → ' + txt);
+                           txt === 'go' || txt.includes('submit')){
+                            Catcher.log(tag + ' CLICK → ' + txt);
                             b.click();
                             return true;
                         }
@@ -219,39 +265,22 @@ class MainActivity : AppCompatActivity() {
                     return false;
                 }
 
-                forceFill();
-                setTimeout(forceFill, 300);
-                setTimeout(function(){ forceFill(); tryClick(); }, 800);
-                setTimeout(function(){ forceFill(); tryClick(); }, 1600);
-                setTimeout(function(){ forceFill(); tryClick(); }, 2800);
+                forceKey();
+                setTimeout(forceKey, 200);
+                setTimeout(function(){ forceKey(); tryClick(); }, 500);
+                setTimeout(function(){ forceKey(); tryClick(); }, 1200);
 
-                Catcher.log('Injected OK | key=' + KEY);
+                Catcher.log(tag + ' inject OK key=' + KEY);
             })();
         """.trimIndent()
 
         view?.evaluateJavascript(js, null)
-
-        mainHandler.postDelayed({
-            view?.evaluateJavascript("""
-                (function(){
-                    var KEY='$key';
-                    document.querySelectorAll('input').forEach(function(el){
-                        el.value=KEY;
-                        el.dispatchEvent(new Event('input',{bubbles:true}));
-                    });
-                    document.querySelectorAll('button').forEach(function(b){
-                        var t=(b.innerText||'').toLowerCase();
-                        if(t.includes('unlock')||t.includes('connect')||t.includes('login')||t.includes('activate')) b.click();
-                    });
-                })();
-            """.trimIndent(), null)
-        }, 1400)
     }
 
     private fun appendLog(msg: String) {
         logBuilder.append(msg).append("\n")
-        if (logBuilder.length > 18000) {
-            logBuilder.delete(0, logBuilder.length - 14000)
+        if (logBuilder.length > 20000) {
+            logBuilder.delete(0, logBuilder.length - 15000)
         }
         tvLog.text = logBuilder.toString()
     }
