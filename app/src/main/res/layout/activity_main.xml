@@ -9,12 +9,20 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="PHANTOM SUB CATCHER"
+        android:text="MULTI SUB CATCHER"
         android:textColor="#00E676"
         android:textSize="18sp"
         android:textStyle="bold"
         android:gravity="center"
-        android:padding="8dp" />
+        android:padding="6dp" />
+
+    <Spinner
+        android:id="@+id/spinnerSite"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#1A1A1A"
+        android:padding="8dp"
+        android:layout_marginBottom="4dp" />
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -27,7 +35,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:hint="PHTM-XXXX-XXXX-XXXX"
+            android:hint="KEY yahan dalo"
             android:textColor="#FFFFFF"
             android:textColorHint="#666666"
             android:background="#1A1A1A"
@@ -89,7 +97,7 @@
 
     <ScrollView
         android:layout_width="match_parent"
-        android:layout_height="180dp"
+        android:layout_height="160dp"
         android:background="#111111">
 
         <TextView
