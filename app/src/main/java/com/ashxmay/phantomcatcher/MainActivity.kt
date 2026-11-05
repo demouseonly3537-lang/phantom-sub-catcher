@@ -11,17 +11,20 @@ import android.view.View
 import android.webkit.*
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
+import java.util.regex.Pattern
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
     private lateinit var tvLog: TextView
     private lateinit var etKey: EditText
+    private lateinit var etCustomUrl: EditText
     private lateinit var spinnerSite: Spinner
     private lateinit var tvSiteUrl: TextView
     private val logBuilder = StringBuilder()
     private val mainHandler = Handler(Looper.getMainLooper())
     private var injectCount = 0
+    private var lastCopied = ""
 
     data class Site(val name: String, val url: String)
 
@@ -43,6 +46,7 @@ class MainActivity : AppCompatActivity() {
         webView = findViewById(R.id.webView)
         tvLog = findViewById(R.id.tvLog)
         etKey = findViewById(R.id.etKey)
+        etCustomUrl = findViewById(R.id.etCustomUrl)
         spinnerSite = findViewById(R.id.spinnerSite)
         tvSiteUrl = findViewById(R.id.tvSiteUrl)
         val btnLoad = findViewById<Button>(R.id.btnLoad)
@@ -58,25 +62,29 @@ class MainActivity : AppCompatActivity() {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
                 val site = sites[position]
                 tvSiteUrl.text = site.url
-                appendLog(">> Site changed → ${site.name}")
-                loadSelectedSite()
+                // clear custom url when picking preset so spinner wins
+                if (etCustomUrl.text.toString().trim().isEmpty()) {
+                    appendLog(">> Site → ${site.name}")
+                }
             }
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
 
         etKey.setText("")
         etKey.hint = "KEY yahan paste karo"
+        etCustomUrl.hint = "https://... (naya link optional)"
 
         setupWebView()
 
         btnLoad.setOnClickListener {
-            loadSelectedSite()
+            loadTarget()
         }
 
         btnClear.setOnClickListener {
             logBuilder.clear()
             tvLog.text = "Waiting...\n"
             injectCount = 0
+            lastCopied = ""
         }
 
         btnCopy.setOnClickListener {
@@ -86,20 +94,38 @@ class MainActivity : AppCompatActivity() {
         }
 
         tvSiteUrl.text = sites[0].url
-        appendLog(">> Ready. Site select → Key paste → auto load / GO")
+        appendLog(">> Ready. Preset site YA custom URL + Key → GO")
+        appendLog(">> Custom URL filled ho to wohi load hoga")
     }
 
-    private fun loadSelectedSite() {
+    private fun resolveUrl(): String {
+        val custom = etCustomUrl.text.toString().trim()
+        if (custom.isNotEmpty()) {
+            return if (custom.startsWith("http://") || custom.startsWith("https://"))
+                custom
+            else
+                "https://$custom"
+        }
         val pos = spinnerSite.selectedItemPosition
-        if (pos < 0) return
-        val site = sites[pos]
+        if (pos in sites.indices) return sites[pos].url
+        return sites[0].url
+    }
+
+    private fun loadTarget() {
+        val url = resolveUrl()
         val key = etKey.text.toString().trim()
         injectCount = 0
-        appendLog(">> LOAD ${site.name} | key=${if (key.isEmpty()) "(empty)" else key}")
+        val label = if (etCustomUrl.text.toString().trim().isNotEmpty()) "CUSTOM" else {
+            val pos = spinnerSite.selectedItemPosition
+            if (pos in sites.indices) sites[pos].name else "?"
+        }
+        tvSiteUrl.text = url
+        appendLog(">> LOAD $label | $url")
+        appendLog(">> key=${if (key.isEmpty()) "(empty)" else key}")
         webView.stopLoading()
         webView.loadUrl("about:blank")
         mainHandler.postDelayed({
-            webView.loadUrl(site.url)
+            webView.loadUrl(url)
         }, 150)
     }
 
@@ -120,7 +146,10 @@ class MainActivity : AppCompatActivity() {
         webView.addJavascriptInterface(object {
             @JavascriptInterface
             fun log(msg: String) {
-                runOnUiThread { appendLog("JS: $msg") }
+                runOnUiThread {
+                    appendLog("JS: $msg")
+                    scanAndCopy(msg)
+                }
             }
         }, "Catcher")
 
@@ -133,20 +162,11 @@ class MainActivity : AppCompatActivity() {
                 val url = request?.url?.toString() ?: return false
                 appendLog("NAV: $url")
 
-                if (url.startsWith("happ://") || url.startsWith("hiddify://") ||
-                    url.startsWith("v2rayng://") || url.startsWith("clash://") ||
-                    url.startsWith("sing-box://") || url.startsWith("v2raytun://") ||
-                    url.startsWith("streisand://") || url.contains("crypt") ||
-                    url.startsWith("shadowrocket://") || url.startsWith("surge://")
-                ) {
+                if (isDeepLink(url)) {
                     appendLog("=== DEEP LINK CAUGHT ===")
                     appendLog(url)
                     appendLog("========================")
-                    runOnUiThread {
-                        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        cm.setPrimaryClip(ClipData.newPlainText("deeplink", url))
-                        Toast.makeText(this@MainActivity, "Deep-link COPIED!", Toast.LENGTH_LONG).show()
-                    }
+                    copyToClipboard(url, "Deep-link COPIED!")
                     return true
                 }
                 return false
@@ -170,13 +190,77 @@ class MainActivity : AppCompatActivity() {
                     if (m.contains("BODY", true) || m.contains("redeem", true) ||
                         m.contains("happ", true) || m.contains("KEY", true) ||
                         m.contains("status", true) || m.contains("error", true) ||
-                        m.contains("config", true) || m.contains("sub", true)
+                        m.contains("config", true) || m.contains("sub", true) ||
+                        m.contains("href", true) || m.contains("crypt", true)
                     ) {
                         appendLog("CONSOLE: $m")
+                        scanAndCopy(m)
                     }
                 }
                 return true
             }
+        }
+    }
+
+    private fun isDeepLink(url: String): Boolean {
+        val u = url.lowercase()
+        return u.startsWith("happ://") || u.startsWith("hiddify://") ||
+            u.startsWith("v2rayng://") || u.startsWith("clash://") ||
+            u.startsWith("sing-box://") || u.startsWith("v2raytun://") ||
+            u.startsWith("streisand://") || u.startsWith("shadowrocket://") ||
+            u.startsWith("surge://") || u.contains("crypt5/") || u.contains("crypt4/")
+    }
+
+    private fun scanAndCopy(text: String) {
+        // happ:// or similar deep links inside response bodies
+        val deepPatterns = listOf(
+            Pattern.compile("(happ://[^\\s\\\"'<>]+)"),
+            Pattern.compile("(hiddify://[^\\s\\\"'<>]+)"),
+            Pattern.compile("(v2raytun://[^\\s\\\"'<>]+)"),
+            Pattern.compile("(v2rayng://[^\\s\\\"'<>]+)")
+        )
+        for (p in deepPatterns) {
+            val m = p.matcher(text)
+            if (m.find()) {
+                val link = m.group(1) ?: continue
+                if (link != lastCopied && link.length > 20) {
+                    appendLog("=== EXTRACTED DEEP LINK ===")
+                    appendLog(link)
+                    copyToClipboard(link, "Deep-link COPIED!")
+                }
+                return
+            }
+        }
+        // plain https subscription-looking URLs in JSON (href/url/sub fields)
+        val httpsPat = Pattern.compile("(https://[^\\s\\\"'<>]{15,})")
+        val m = httpsPat.matcher(text)
+        while (m.find()) {
+            val link = m.group(1) ?: continue
+            val low = link.lowercase()
+            if (low.contains("subscribe") || low.contains("/sub") ||
+                low.contains("config") || low.contains("clash") ||
+                low.contains("v2ray") || low.contains("happ") ||
+                low.endsWith(".yaml") || low.endsWith(".yml") ||
+                low.endsWith(".json") || low.contains("token=") ||
+                low.contains("key=")
+            ) {
+                if (link != lastCopied) {
+                    appendLog("=== HTTPS SUB LINK ===")
+                    appendLog(link)
+                    copyToClipboard(link, "HTTPS link COPIED!")
+                }
+                return
+            }
+        }
+    }
+
+    private fun copyToClipboard(text: String, toast: String) {
+        if (text == lastCopied) return
+        lastCopied = text
+        runOnUiThread {
+            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            cm.setPrimaryClip(ClipData.newPlainText("caught", text))
+            Toast.makeText(this, toast, Toast.LENGTH_LONG).show()
         }
     }
 
@@ -188,10 +272,12 @@ class MainActivity : AppCompatActivity() {
         }
         injectCount++
         val n = injectCount
+        // escape key for JS string
+        val safeKey = key.replace("\\", "\\\\").replace("'", "\\'")
 
         val js = """
             (function(){
-                var KEY = '$key';
+                var KEY = '$safeKey';
                 var tag = '[$n]';
 
                 if(!window.__fetchPatched){
@@ -205,7 +291,7 @@ class MainActivity : AppCompatActivity() {
                         return origFetch.apply(this, arguments).then(function(resp) {
                             var clone = resp.clone();
                             clone.text().then(function(t) {
-                                Catcher.log(tag + ' RESP ' + resp.status + ' ' + url + ' → ' + t.substring(0, 1000));
+                                Catcher.log(tag + ' RESP ' + resp.status + ' ' + url + ' → ' + t.substring(0, 1500));
                             }).catch(function(){});
                             return resp;
                         });
@@ -220,7 +306,7 @@ class MainActivity : AppCompatActivity() {
                         var self = this;
                         Catcher.log(tag + ' XHR ' + (this.__m||'?') + ' ' + (this.__u||'?') + ' BODY=' + (body ? String(body).substring(0,700) : ''));
                         this.addEventListener('load', function() {
-                            Catcher.log(tag + ' XHR-RESP ' + self.status + ' → ' + (self.responseText||'').substring(0,1000));
+                            Catcher.log(tag + ' XHR-RESP ' + self.status + ' → ' + (self.responseText||'').substring(0,1500));
                         });
                         return origSend.apply(this, arguments);
                     };
@@ -256,7 +342,7 @@ class MainActivity : AppCompatActivity() {
                         var txt = (b.innerText || b.value || b.textContent || '').toLowerCase().trim();
                         if(txt.includes('unlock') || txt === 'connect' || txt.includes('redeem') ||
                            txt.includes('login') || txt.includes('activate') || txt.includes('start') ||
-                           txt === 'go' || txt.includes('submit')){
+                           txt === 'go' || txt.includes('submit') || txt.includes('auth')){
                             Catcher.log(tag + ' CLICK → ' + txt);
                             b.click();
                             return true;
